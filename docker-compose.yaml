@@ -11,5 +11,5 @@ services:
     volumes:
       - cl-assistant_postgres:/var/lib/postgresql/data
 volumes:
-  ranking_copilot_postgres:
+  cl-assistant_postgres:
     driver: local

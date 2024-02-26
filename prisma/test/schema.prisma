@@ -1,0 +1,248 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User
+
+enum Subject {
+  HISTORY
+}
+
+enum Role {
+  USER
+  ADMIN
+  OWNER
+}
+
+enum AccountStatus {
+  active
+  blocked
+}
+
+model Profile {
+  id Int @id @default(autoincrement())
+
+  firstName String?
+  lastName  String?
+
+  avatar String?
+
+  userId Int  @unique
+  user   User @relation(fields: [userId], references: [id])
+}
+
+model User {
+  id      Int      @id @default(autoincrement())
+  email   String   @unique @db.VarChar(320)
+  phone   String?
+  profile Profile?
+
+  roles         Role[]        @default([USER])
+  accountStatus AccountStatus @default(active)
+
+  registrationDate DateTime  @default(now())
+  lastVisitDate    DateTime? @default(now())
+
+  oauthProvider  String?
+  googleId       String?          @unique
+  historyProfile HistoryProfile[]
+  orders         Order[]
+}
+
+// Payments
+
+enum OrderType {
+  SINGLE_PAYMENT
+  SUBSCRIPTION
+}
+
+model PaymentOption {
+  id   Int    @id @default(autoincrement())
+  name String @unique
+
+  accessUntil DateTime?
+  orderType   OrderType
+
+  orders Order[]
+
+  price    Int
+  discount Int?
+  active   Boolean? @default(true)
+
+  fondyInput Json
+
+  subjects Subject[]
+}
+
+enum OrderStatus {
+  CREATED
+
+  // payment
+  SUCCESS
+  FAILURE
+
+  // subs
+  SUBSCRIBED
+  UNSUBSCRIBED
+}
+
+model Order {
+  id     Int         @id @default(autoincrement())
+  type   OrderType
+  status OrderStatus
+
+  paymentOptionId     Int
+  paymentOption PaymentOption @relation(fields: [paymentOptionId], references: [id])
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  payments Payment[]
+}
+
+enum PaymentStatus {
+  SUCCESS
+  FAILURE
+  REVERSED
+}
+
+model Payment {
+  id     Int           @id @default(autoincrement())
+  status PaymentStatus
+  date   DateTime
+
+  orderId Int   @unique
+  order   Order @relation(fields: [orderId], references: [id])
+
+  data Json
+}
+
+// --- History ---
+
+// Practice
+
+enum HistoryQuestionType {
+  SINGLE
+  ORDER
+  MATCH
+  SELECT
+}
+
+model HistoryQuestion {
+  id      Int                 @id @default(autoincrement())
+  name    String
+  type    HistoryQuestionType
+  options Json
+  correct Json
+  order   Int?
+
+  topics       HistoryTopic[]
+  keyWords     HistoryKeyWord[]
+  solution     String?
+  whereToLearn String[]
+  advice       String?
+
+  profilesSeen     HistoryProfile[] @relation("profilesSeen")
+  profilesAnswered HistoryProfile[] @relation("profilesAnswered")
+  profilesFailed   HistoryProfile[] @relation("profilesFailed")
+  ticketId         Int?
+  ticket           HistoryTicket?   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+model HistoryTopic {
+  id    Int     @id @default(autoincrement())
+  name  String  @db.VarChar(255)
+  desc  String?
+  order Int     @unique
+
+  questions  HistoryQuestion[]
+  keyWords   HistoryKeyWord[]
+  progresses HistoryProgress[]
+}
+
+model HistoryKeyWord {
+  id        Int               @id @default(autoincrement())
+  name      String            @db.VarChar(100)
+  topicId   Int               @unique
+  topic     HistoryTopic      @relation(fields: [topicId], references: [id])
+  questions HistoryQuestion[]
+}
+
+enum TicketType {
+  MAIN
+  ADDITIONAL
+  TEST
+  FIRST
+  SECOND
+  DEMO
+}
+
+model HistoryTicket {
+  id           Int               @id @default(autoincrement())
+  year         Int
+  type         TicketType
+  questions    HistoryQuestion[]
+  sessions     HistorySession[]
+  profilesSeen HistoryProfile[]
+}
+
+// Progress
+
+model HistoryProfile {
+  id Int @id @default(autoincrement())
+
+  userId      Int       @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessUntil DateTime?
+
+  seen     HistoryQuestion[] @relation("profilesSeen")
+  answered HistoryQuestion[] @relation("profilesAnswered")
+  failed   HistoryQuestion[] @relation("profilesFailed")
+
+  ticketsSeen HistoryTicket[]
+
+  progressTotal   Int @default(0)
+  progressTopics  Int @default(0)
+  progressSession Int @default(0)
+
+  timeAvarage Int?
+
+  activeSessionId Int?              @unique
+  activeSession   HistorySession?   @relation(fields: [activeSessionId], references: [id], onDelete: SetNull)
+  progresses      HistoryProgress[]
+  sessions        HistorySession[]  @relation("profileSessions")
+}
+
+model HistoryProgress {
+  value Int @default(0)
+
+  topicId Int
+  topic   HistoryTopic @relation(fields: [topicId], references: [id])
+
+  profileId Int
+  profile   HistoryProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@id([topicId, profileId])
+}
+
+model HistorySession {
+  id         Int      @id @default(autoincrement())
+  done       Boolean  @default(false)
+  lastViewed DateTime @default(now())
+  timePassed Int      @default(0)
+  score      Int?
+  rate       Int?
+  answers    Json
+
+  ticketId Int
+  ticket   HistoryTicket @relation(references: [id], fields: [ticketId])
+
+  profileId     Int
+  profile       HistoryProfile  @relation("profileSessions", references: [id], fields: [profileId], onDelete: Cascade)
+  activeProfile HistoryProfile?
+}
